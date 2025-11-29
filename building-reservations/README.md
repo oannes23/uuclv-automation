@@ -50,17 +50,17 @@ This form is the *single input source* for all reservation requests.
 
 The Google Sheet contains three tabs:
 
-### ### `Form Responses 1` (Authoritative Data Source)
+### `Form Responses 1` (Authoritative Data Source)
 
 This is the canonical database.  
-Google Forms writes to its own mapped columns, and we add three **custom columns** up front:
+Google Forms writes to its own mapped columns, and we add three **custom columns**:
 
 | Column | Purpose |
 |--------|---------|
 | **A – Approval** | Default `Pending`; updated by approvers |
 | **B – Approver** | Auto-filled with the user's email when they approve |
-| **C – Calendar Event ID** | Stores the created event's ID to avoid duplicates |
-| **D →** | Form-owned fields: Timestamp, Event Name, Date, Start Time, End Time, Spaces, Key Holder, AV Help, Extra Contacts, Details, Email |
+| **C → M** | Form-owned fields: Timestamp, Event Name, Date, Start Time, End Time, Spaces, Key Holder, AV Help, Extra Contacts, Details, Email |
+| **N – Calendar Event ID** | Stores the created event's ID to avoid duplicates |
 
 All automation reads/writes here.  
 This avoids missed rows, race conditions, and brittle copy logic.
@@ -68,7 +68,7 @@ This avoids missed rows, race conditions, and brittle copy logic.
 ---
 
 
-### ### `Upcoming` (Next 50 Approved Future Events)
+### `Upcoming` (Next 50 Approved Future Events)
 
 A dashboard tab that shows:
 
@@ -81,22 +81,24 @@ Used for publishing or embedding into calendars/feeds.
 
 ---
 
-### ### `Config` Sheet — *Calendar Settings*
+### `Config` Sheet — *Calendar Settings*
 
 Contains:
 
 | Cell | Value |
 |------|-------|
+| `A1` | Approval Status options |
+| `A2` - `A4` | Pending, Approved, and Rejected status |
 | `D1` | `Calendar ID` |
 | `D2` | The actual Google Calendar ID where events should be created |
 
-This separation makes it easy to change which calendar receives reservations.
+The A column creates the dropdown options available on the A column of the `Form Responses 1` tab. The D column information separation makes it easy to change which calendar receives reservations.
 
 ---
 
 # Apps Script Logic
 
-All automation lives inside one Apps Script project with **two installable triggers**. You can see the code in **[`Code.gs`](Code.gs)**
+All automation lives inside one Apps Script project with **two installable triggers** and some helper functions. You can see the code in **[`Code.gs`](Code.gs)**
 
 ### Trigger 1 — `onFormSubmit`
 **Event:** “On form submit”  
@@ -154,37 +156,8 @@ Both triggers are stable and row-order independent because they operate on the r
 
 # Sheet Formulas
 
-## `Approvals` Sheet Master Formula
-
-```gs
-=ARRAYFORMULA(
-  IF('Form Responses 1'!D2:D="","",
-    {
-      'Form Responses 1'!A2:A,                                       /* Approval */
-      'Form Responses 1'!B2:B,                                       /* Approver */
-      'Form Responses 1'!E2:E,                                       /* Event Name */
-      'Form Responses 1'!F2:F + 'Form Responses 1'!G2:G,             /* Start datetime */
-      'Form Responses 1'!F2:F + 'Form Responses 1'!H2:H,             /* End datetime */
-      'Form Responses 1'!I2:I,                                       /* Spaces */
-      'Form Responses 1'!J2:J,                                       /* Key Holder needed? */
-      'Form Responses 1'!K2:K,                                       /* AV Help needed? */
-      IF('Form Responses 1'!L2:L="",
-         'Form Responses 1'!N2:N,
-         'Form Responses 1'!N2:N & CHAR(10) & 'Form Responses 1'!L2:L
-      ),                                                              /* Contacts */
-      'Form Responses 1'!M2:M,                                       /* Details */
-      'Form Responses 1'!D2:D,                                       /* Timestamp */
-      'Form Responses 1'!C2:C                                        /* Calendar Event ID */
-    }
-  )
-)
-
-(Formula column mapping may shift depending on your final column layout — this repo should document the actual final version.)
-
-⸻
-
 Upcoming Sheet Formula
-
+```gs
 =ARRAYFORMULA({
   {"Approval","Approver","Event Name","Start","End","Spaces",
    "Key holder needed?","AV help needed?","Contacts",
@@ -201,7 +174,7 @@ Upcoming Sheet Formula
     50, 12
   )
 })
-
+```
 
 ⸻
 
@@ -252,10 +225,7 @@ Repository Structure
 
 /
 ├── README.md          # This document
-├── Code.gs            # Full Apps Script implementation
-├── formulas.md        # Sheet formulas (Approvals / Upcoming)
-└── screenshots/       # Optional: UI screenshots for documentation
-
+└── Code.gs            # Full Apps Script implementation
 
 ⸻
 
