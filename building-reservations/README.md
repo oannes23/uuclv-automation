@@ -222,11 +222,11 @@ Future Enhancements (Optional)
 ⸻
 
 Repository Structure
-
+```
 /
 ├── README.md          # This document
 └── Code.gs            # Full Apps Script implementation
-
+```
 ⸻
 
 End-to-End Summary
