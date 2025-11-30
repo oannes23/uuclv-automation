@@ -159,22 +159,49 @@ Both triggers are stable and row-order independent because they operate on the r
 Upcoming Sheet Formula
 ```gs
 =ARRAYFORMULA({
-  {"Approval","Approver","Event Name","Start","End","Spaces",
+  {"Approver","Event Name","Start","End","Spaces",
    "Key holder needed?","AV help needed?","Contacts",
    "Details / Requests","Form Timestamp","Calendar Event ID"};
   ARRAY_CONSTRAIN(
     SORT(
       FILTER(
-        Approvals!A2:L,
-        Approvals!A2:A="Approved",
-        Approvals!E2:E >= NOW()
+        {
+          'Form Responses 1'!B2:B,                                     
+          'Form Responses 1'!D2:D,                                     
+          'Form Responses 1'!E2:E + 'Form Responses 1'!F2:F,           
+          'Form Responses 1'!E2:E + 'Form Responses 1'!G2:G,           
+          'Form Responses 1'!H2:H,                                     
+          'Form Responses 1'!I2:I,                                     
+          'Form Responses 1'!J2:J,                                     
+          'Form Responses 1'!M2:M,                                     
+          'Form Responses 1'!L2:L,                                     
+          'Form Responses 1'!C2:C,                                     
+          'Form Responses 1'!N2:N                                     
+        },
+        'Form Responses 1'!A2:A="Approved",
+        ('Form Responses 1'!E2:E + 'Form Responses 1'!G2:G) >= NOW()
       ),
-      4, TRUE
+      3, TRUE
     ),
-    50, 12
+    50, 11
   )
 })
 ```
+
+---
+
+## Timezone Configuration (Pacific Time)
+
+For event times to appear correctly on the calendar (e.g., a 6:00 pm form selection shows as 6:00 pm on the calendar), make sure all of the following are set to **Pacific Time (America/Los_Angeles)**:
+
+- **Spreadsheet timezone**:  
+  - In the `Form Responses 1` spreadsheet, go to **File → Settings → Locale / Time zone** and set the time zone to Pacific.
+- **Apps Script project timezone**:  
+  - In the Apps Script editor, go to **Project Settings → Script time zone** and set it to Pacific.
+- **Target Google Calendar timezone**:  
+  - In Google Calendar, open **Settings → Time zone** for the UUCLV calendar and set it to Pacific.
+
+When all three are aligned to Pacific, the `combineDateAndTime` helper and the `onApprovalEdit` trigger will create events at the exact times selected in the form.
 
 ⸻
 

@@ -12,12 +12,16 @@ function combineDateAndTime(date, time) {
 
 /**
  * Trigger: On form submit
- * Copies new submissions from 'Form Responses 1' into 'Approvals',
- * with Approval defaulting to 'Pending'.
+ * Ensures the metadata columns on "Form Responses 1" are initialized:
+ *  - Column A: Approval (defaults to "Pending")
+ *  - Column B: Approver (cleared)
+ *  - Column N: Calendar Event ID (cleared)
  */
 function onFormSubmit(e) {
   const FORM_SHEET_NAME = 'Form Responses 1';
-  const APPROVALS_SHEET_NAME = 'Approvals';
+  const APPROVAL_COL = 1;   // A: Approval
+  const APPROVER_COL = 2;   // B: Approver
+  const EVENT_ID_COL = 14;  // N: Calendar Event ID
 
   if (!e || !e.range) return;
 
@@ -25,65 +29,65 @@ function onFormSubmit(e) {
   if (sheet.getName() !== FORM_SHEET_NAME) return;
 
   const row = e.range.getRow();
-  const lastCol = sheet.getLastColumn();
-  const v = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
+  if (row <= 1) return; // skip header
 
-  // Map columns from Form Responses 1
-  const timestamp     = v[0];  // A: Timestamp
-  const eventName     = v[1];  // B: Event Name
-  const dateVal       = v[2];  // C: Date
-  const startTimeVal  = v[3];  // D: Start Time
-  const endTimeVal    = v[4];  // E: End Time
-  const spaces        = v[5];  // F: Spaces
-  const keyHolder     = v[6];  // G: Key holder?
-  const avHelp        = v[7];  // H: AV help?
-  const extraContacts = v[8];  // I: Extra contact info
-  const details       = v[9];  // J: Details / Requests
-  const email         = v[10]; // K: Email Address
-
-  const startDateTime = combineDateAndTime(dateVal, startTimeVal);
-  const endDateTime   = combineDateAndTime(dateVal, endTimeVal);
-
-  // Build Contacts field (email + optional extra contact info)
-  let contacts = email || '';
-  if (extraContacts && String(extraContacts).trim() !== '') {
-    contacts = contacts
-      ? contacts + '\n' + extraContacts
-      : extraContacts;
+  // Initialize Approval column to "Pending" if blank
+  const approvalCell = sheet.getRange(row, APPROVAL_COL);
+  if (!approvalCell.getValue()) {
+    approvalCell.setValue('Pending');
   }
 
-  const approvalsSheet = sheet.getParent().getSheetByName(APPROVALS_SHEET_NAME);
-  if (!approvalsSheet) return;
+  // Clear Approver (B) if this is a brand‑new submission
+  const approverCell = sheet.getRange(row, APPROVER_COL);
+  if (!approverCell.getValue()) {
+    approverCell.setValue('');
+  }
 
-  approvalsSheet.appendRow([
-    'Pending',      // A: Approval (default)
-    '',             // B: Approver (filled later on approval)
-    eventName,      // C
-    startDateTime,  // D
-    endDateTime,    // E
-    spaces,         // F
-    keyHolder,      // G
-    avHelp,         // H
-    contacts,       // I
-    details,        // J
-    timestamp,      // K
-    ''              // L: Calendar Event ID (filled later)
-  ]);
+  // Clear Calendar Event ID (N) so re-submissions never reuse stale IDs
+  const eventIdCell = sheet.getRange(row, EVENT_ID_COL);
+  if (!eventIdCell.getValue()) {
+    eventIdCell.setValue('');
+  }
 }
 
 /**
  * Trigger: On edit
- * When Approval is changed to 'Approved' on 'Approvals' sheet:
+ * When Approval is changed to 'Approved' on 'Form Responses 1' sheet:
  *  - Fills Approver with the editor's email
  *  - Creates a Google Calendar event
  *  - Stores the Calendar Event ID to avoid duplicates
  */
 function onApprovalEdit(e) {
-  const SHEET_NAME = 'Approvals';
+  const SHEET_NAME = 'Form Responses 1';
   const FIRST_DATA_ROW = 2;
-  const APPROVAL_COL = 1;   // Column A
-  const APPROVER_COL = 2;   // Column B
-  const EVENT_ID_COL = 12;  // Column L
+  const APPROVAL_COL = 1;   // Column A: Approval
+  const APPROVER_COL = 2;   // Column B: Approver
+
+  // "Form Responses 1" column layout (zero-based indexes in rowValues[]):
+  //  0: A - Approval
+  //  1: B - Approver
+  //  2: C - Timestamp
+  //  3: D - Event Name
+  //  4: E - Date
+  //  5: F - Start Time
+  //  6: G - End Time
+  //  7: H - Spaces
+  //  8: I - Key holder needed?
+  //  9: J - AV help needed?
+  // 10: K - Extra Contacts
+  // 11: L - Details / Requests
+  // 12: M - Email
+  // 13: N - Calendar Event ID
+  const TIMESTAMP_COL_INDEX = 2;
+  const EVENT_NAME_COL_INDEX = 3;
+  const DATE_COL_INDEX = 4;
+  const START_TIME_COL_INDEX = 5;
+  const END_TIME_COL_INDEX = 6;
+  const SPACES_COL_INDEX = 7;
+  const EXTRA_CONTACTS_COL_INDEX = 10;
+  const DETAILS_COL_INDEX = 11;
+  const EMAIL_COL_INDEX = 12;
+  const EVENT_ID_COL_INDEX = 13;
 
   if (!e || !e.range) return;
 
@@ -106,18 +110,31 @@ function onApprovalEdit(e) {
   const rowValues = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
 
   // Avoid creating duplicate events
-  const existingEventId = rowValues[EVENT_ID_COL - 1];
+  const existingEventId = rowValues[EVENT_ID_COL_INDEX];
   if (existingEventId) return;
 
-  const eventName  = rowValues[2];  // C: Event Name
-  const startValue = rowValues[3];  // D: Start (Date & Time)
-  const endValue   = rowValues[4];  // E: End (Date & Time)
-  const spaces     = rowValues[5];  // F: Spaces (used as location)
-  const contacts   = rowValues[8];  // I: Contacts
-  const details    = rowValues[9];  // J: Details / Requests
+  const eventName     = rowValues[EVENT_NAME_COL_INDEX];      // D: Event Name
+  const dateVal       = rowValues[DATE_COL_INDEX];            // E: Date
+  const startTimeVal  = rowValues[START_TIME_COL_INDEX];      // F: Start Time
+  const endTimeVal    = rowValues[END_TIME_COL_INDEX];        // G: End Time
+  const spaces        = rowValues[SPACES_COL_INDEX];          // H: Spaces (used as location)
+  const extraContacts = rowValues[EXTRA_CONTACTS_COL_INDEX];  // K: Extra Contacts
+  const details       = rowValues[DETAILS_COL_INDEX];         // L: Details / Requests
+  const email         = rowValues[EMAIL_COL_INDEX];           // M: Email
 
-  if (!eventName || !startValue || !endValue) {
+  const startDateTime = combineDateAndTime(dateVal, startTimeVal);
+  const endDateTime   = combineDateAndTime(dateVal, endTimeVal);
+
+  if (!eventName || !startDateTime || !endDateTime) {
     return; // missing critical info
+  }
+
+  // Build Contacts field (email + optional extra contact info)
+  let contacts = email || '';
+  if (extraContacts && String(extraContacts).trim() !== '') {
+    contacts = contacts
+      ? contacts + '\n' + extraContacts
+      : extraContacts;
   }
 
   // Get the email of the person who edited the Approval cell
@@ -132,6 +149,8 @@ function onApprovalEdit(e) {
   // Write approver email into column B
   if (approverEmail) {
     sheet.getRange(row, APPROVER_COL).setValue(approverEmail);
+    // Also refresh the cached rowValues entry for Approver (index 1) if needed later
+    rowValues[1] = approverEmail;
   }
 
   // Get Calendar ID from Config sheet
@@ -158,14 +177,11 @@ function onApprovalEdit(e) {
   }
   const description = descriptionParts.join('\n\n');
 
-  const startDate = new Date(startValue);
-  const endDate   = new Date(endValue);
-
-  const event = calendar.createEvent(eventName, startDate, endDate, {
+  const event = calendar.createEvent(eventName, startDateTime, endDateTime, {
     description: description,
     location: spaces || ''  // ← key change: set event location from Spaces
   });
 
   // Save the Calendar Event ID so we don't create duplicates later
-  sheet.getRange(row, EVENT_ID_COL).setValue(event.getId());
+  sheet.getRange(row, EVENT_ID_COL_INDEX + 1).setValue(event.getId());
 }
