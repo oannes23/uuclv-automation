@@ -207,8 +207,8 @@ A typical pattern (for `All Upcoming`) will look similar to:
 
 ```gs
 =ARRAYFORMULA({
-  {"Approver","Event Name","Start","End","Target",
-   "Promotion","Needs Graphic?","Graphic","Description",
+  {"Approver","Event Name","Description","Start","End","Target",
+   "Promotion","Needs Graphic?","Graphic",
    "Form Timestamp","Calendar Event ID"};
   ARRAY_CONSTRAIN(
     SORT(
@@ -216,13 +216,13 @@ A typical pattern (for `All Upcoming`) will look similar to:
         {
           'Form Responses 1'!B2:B,
           'Form Responses 1'!E2:E,
+          'Form Responses 1'!F2:F,
           'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
           'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
           'Form Responses 1'!J2:J,
           'Form Responses 1'!K2:K,
           'Form Responses 1'!L2:L,
           'Form Responses 1'!M2:M,
-          'Form Responses 1'!F2:F,
           'Form Responses 1'!C2:C,
           'Form Responses 1'!N2:N
         },
@@ -236,7 +236,77 @@ A typical pattern (for `All Upcoming`) will look similar to:
 })
 ```
 
-Other view tabs (e.g., `Members`, `Public`, `Social Media`, `Flash`, `Sunday`, `Website`) use the same pattern with **extra filter conditions**, such as:
+You can then adapt this pattern for more focused views.
+
+For example, a **Flash-only** view (where the promotion options include the word “Flash”) could look like:
+
+```gs
+=ARRAYFORMULA({
+  {"Approver","Event Name","Description","Start","End","Target",
+   "Promotion","Needs Graphic?","Graphic",
+   "Form Timestamp","Calendar Event ID"};
+  ARRAY_CONSTRAIN(
+    SORT(
+      FILTER(
+        {
+          'Form Responses 1'!B2:B,
+          'Form Responses 1'!E2:E,
+          'Form Responses 1'!F2:F,
+          'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
+          'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
+          'Form Responses 1'!J2:J,
+          'Form Responses 1'!K2:K,
+          'Form Responses 1'!L2:L,
+          'Form Responses 1'!M2:M,
+          'Form Responses 1'!C2:C,
+          'Form Responses 1'!N2:N
+        },
+        'Form Responses 1'!A2:A="Approved",
+        ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW(),
+        IFERROR(REGEXMATCH('Form Responses 1'!K2:K,"Flash"),FALSE)
+      ),
+      3, TRUE
+    ),
+    200, 11
+  )
+})
+```
+
+And a **Members-only** view (where the target audience column equals `Members`) could look like:
+
+```gs
+=ARRAYFORMULA({
+  {"Approver","Event Name","Description","Start","End","Target",
+   "Promotion","Needs Graphic?","Graphic",
+   "Form Timestamp","Calendar Event ID"};
+  ARRAY_CONSTRAIN(
+    SORT(
+      FILTER(
+        {
+          'Form Responses 1'!B2:B,
+          'Form Responses 1'!E2:E,
+          'Form Responses 1'!F2:F,
+          'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
+          'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
+          'Form Responses 1'!J2:J,
+          'Form Responses 1'!K2:K,
+          'Form Responses 1'!L2:L,
+          'Form Responses 1'!M2:M,
+          'Form Responses 1'!C2:C,
+          'Form Responses 1'!N2:N
+        },
+        'Form Responses 1'!A2:A="Approved",
+        ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW(),
+        IFERROR(REGEXMATCH('Form Responses 1'!K2:K,"Members"),FALSE)
+      ),
+      3, TRUE
+    ),
+    200, 11
+  )
+})
+```
+
+Other view tabs (e.g., `Public`, `Social Media`, `Sunday`, `Website`) use the same pattern with **extra filter conditions**, such as:
 
 - Target audience equals a specific segment (Members vs Public)
 - Promotion column contains a specific keyword or option
