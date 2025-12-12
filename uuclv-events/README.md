@@ -191,6 +191,92 @@ On the `All Upcoming` sheet, put the following into cell `A1`:
 
 You can create additional filtered views (e.g., Members‑only, Public‑only, building‑only) by copying this pattern and adding extra `FILTER` conditions on the relevant columns.
 
+#### Example: `Members Only Upcoming` tab
+
+To create a tab that shows only **approved Member events** (target audience = `Members and Friends`), create a new sheet named `Members Only Upcoming` and put this into cell `A1`:
+
+```gs
+=ARRAYFORMULA({
+  {"Approver","Event Name","Description","Start","End",
+   "Target Audience","Building Spaces","Advertise Where",
+   "Setup/Teardown","Needs Graphic?","Graphic",
+   "Form Timestamp","Building Event ID","Website Event ID"};
+  ARRAY_CONSTRAIN(
+    SORT(
+      FILTER(
+        {
+          'Form Responses 1'!B2:B,
+          'Form Responses 1'!E2:E,
+          'Form Responses 1'!F2:F,
+          'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
+          'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
+          'Form Responses 1'!K2:K,
+          'Form Responses 1'!J2:J,
+          'Form Responses 1'!L2:L,
+          'Form Responses 1'!M2:M,
+          'Form Responses 1'!O2:O,
+          'Form Responses 1'!P2:P,
+          'Form Responses 1'!C2:C,
+          'Form Responses 1'!Q2:Q,
+          'Form Responses 1'!R2:R
+        },
+        'Form Responses 1'!A2:A="Approved",
+        ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW(),
+        'Form Responses 1'!K2:K="Members and Friends"
+      ),
+      4, TRUE
+    ),
+    200, 14
+  )
+})
+```
+
+This keeps the **same column order** as `All Upcoming` (so the website embed can reuse the same configuration) but adds an extra filter on the **Target Audience** column (`K`) so that only “Members and Friends” events appear.
+
+#### Example: `Friday Flash` promotion tab
+
+To create a tab that shows only **approved events that requested promotion in the “Friday Flash” channel** (based on **If this event is not Private, where should we advertise it?** in column `L`), create a new sheet named `Friday Flash Upcoming` and put this into cell `A1`:
+
+```gs
+=ARRAYFORMULA({
+  {"Approver","Event Name","Description","Start","End",
+   "Target Audience","Building Spaces","Advertise Where",
+   "Setup/Teardown","Needs Graphic?","Graphic",
+   "Form Timestamp","Building Event ID","Website Event ID"};
+  ARRAY_CONSTRAIN(
+    SORT(
+      FILTER(
+        {
+          'Form Responses 1'!B2:B,
+          'Form Responses 1'!E2:E,
+          'Form Responses 1'!F2:F,
+          'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
+          'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
+          'Form Responses 1'!K2:K,
+          'Form Responses 1'!J2:J,
+          'Form Responses 1'!L2:L,
+          'Form Responses 1'!M2:M,
+          'Form Responses 1'!O2:O,
+          'Form Responses 1'!P2:P,
+          'Form Responses 1'!C2:C,
+          'Form Responses 1'!Q2:Q,
+          'Form Responses 1'!R2:R
+        },
+        'Form Responses 1'!A2:A="Approved",
+        ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW(),
+        REGEXMATCH('Form Responses 1'!L2:L,"Friday Flash")
+      ),
+      4, TRUE
+    ),
+    200, 14
+  )
+})
+```
+
+This uses `REGEXMATCH` on the **Advertise Where** column (`L`) to include any row where “Friday Flash” appears (even if other channels are selected in the same cell), while keeping the same output layout as `All Upcoming`.
+
+These view‑style tabs (especially `All Upcoming`) are also the **source of truth for the website event feeds**, which are rendered client‑side using the `events.js` snippet documented below.
+
 ---
 
 ## Apps Script Logic
@@ -321,12 +407,132 @@ The first time triggers run, Google will prompt for authorization.
 
 ---
 
+## Website Event Feeds (Iframe Embeds from Google Sheets)
+
+Some parts of the UUCLV website are hosted in an environment where we can only run **client‑side JavaScript inside iframes**—we cannot upload standalone `.js` files or run server‑side code.
+
+To support this, the project includes a **copy‑paste‑ready JavaScript snippet** (`events.js`) that:
+
+- **Fetches a public Google Sheet tab** (typically `All Upcoming`, but any view tab with a compatible layout will work)
+- **Parses rows via the Google Visualization (`gviz`) API**
+- **Renders each row as a card** in a simple, readable event list
+- **Allows expanding/collapsing full descriptions** by clicking the event title
+- **Provides friendly error messages** when:
+  - The browser is too old to run the code
+  - The sheet is not publicly readable
+  - The tab name or Sheet ID is wrong
+  - The network request fails
+
+All logic is completely self‑contained so it can be pasted directly into an iframe’s `<script>` tag without referencing any external files.
+
+### How the iframe embed works
+
+At a high level, each iframe:
+
+1. Contains a **target container** where events will be rendered, e.g.:
+   ```html
+   <div id="uuclv-events-all-upcoming"></div>
+   ```
+2. Includes a `<script>` block that contains the contents of `events.js`, with a small **configuration section at the top** where you specify:
+   - **Which sheet to read from** (`sheetId` or full `sheetUrl`)
+   - **Which tab to use** (e.g., `All Upcoming`, `Members Upcoming`, `Public Upcoming`)
+   - **Which DOM element to render into** (e.g., `#uuclv-events-all-upcoming`)
+3. Optionally customizes some behavior (e.g., whether to inject default styles or rely on site CSS).
+
+Because each iframe has its own isolated DOM and JavaScript environment, you can safely have **multiple iframes on the same page**, each pointing at:
+
+- Different tabs of the **same** spreadsheet, or
+- Completely different spreadsheets
+
+…simply by copy‑pasting the snippet and adjusting the configuration per iframe.
+
+### Requirements for the sheet/tab
+
+For the default configuration (using `All Upcoming`):
+
+- The tab should follow the header layout created by the `All Upcoming` formula above:
+  - `Approver`, `Event Name`, `Description`, `Start`, `End`, `Target Audience`, `Building Spaces`, …
+- `Start` and `End` columns should be formatted as **Date/Time** in the spreadsheet; the embed uses the **formatted text** from the sheet for display.
+- The sheet (or at least the relevant tab) must be shared as:
+  - **"Anyone with the link can view"**  
+    (no sign‑in required, otherwise the iframe users will see an error message).
+
+You can also create derivative tabs (e.g., “Public Only”, “Members Only”) that:
+
+- Use the same column order as `All Upcoming`
+- Add extra `FILTER` conditions on `Target Audience` or other fields
+
+These derivative tabs will “just work” with the same embed snippet as long as the column order stays compatible.
+
+### Using `events.js` in an iframe
+
+1. **Make sure the sheet is public‑viewable**
+   - In the Google Sheet: **Share → General access → Anyone with the link → Viewer**
+2. **Create an HTML file for the iframe** (wherever your hosting system lets you edit raw HTML).
+3. In that file, create a container and include the script:
+
+   ```html
+   <div id="uuclv-events-all-upcoming"></div>
+
+   <script>
+   // 1) Paste the contents of events.js here.
+   // 2) Update the CONFIG values at the top of the script:
+   //    - sheetId or sheetUrl
+   //    - sheetTab (e.g. "All Upcoming")
+   //    - targetSelector (e.g. "#uuclv-events-all-upcoming")
+   </script>
+   ```
+
+4. **Optional**: place this HTML file inside an `<iframe>` on any page:
+
+   ```html
+   <iframe
+     src="/path/to/uuclv-events-all-upcoming.html"
+     title="UUCLV Upcoming Events"
+     style="border:0;width:100%;max-width:900px;"
+   ></iframe>
+   ```
+
+Each iframe can have its own copy of the snippet with different configuration, allowing multiple custom feeds on a single page.
+
+### Browser support and error handling
+
+The embed code is intentionally simple but assumes a **reasonably modern browser** with:
+
+- `fetch`
+- `Promise`
+- Basic DOM APIs (`querySelector`, `classList`, `addEventListener`)
+
+If these are missing, or if anything goes wrong while fetching or parsing the sheet, users will see a **clear, human‑readable message** in place of the event list, such as:
+
+- “Your web browser is too old to display this events list.”
+- “We couldn’t load the events right now. Please try again later or contact the office.”
+
+These messages are designed for non‑technical users and do not expose raw error details.
+
+### UX details: expanding/collapsing event descriptions
+
+In the rendered list:
+
+- Each event appears as a **card** showing:
+  - Event title
+  - “When” line (start → end)
+  - Optional “Where” line (from `Building Spaces`)
+- **The full description is hidden by default** to keep the list compact.
+- Clicking the **event title** toggles the full description **open/closed** underneath.
+  - Titles are rendered as accessible, keyboard‑focusable links with `aria-expanded` updated as they toggle.
+
+This behavior is fully implemented inside `events.js`; no extra code is needed in the host page.
+
+---
+
 ## Repository Structure
 
 ```text
 /
 ├── README.md          # This document
-└── Code.gs            # Apps Script implementation for the combined UUCLV events workflow
+├── Code.gs            # Apps Script implementation for the combined UUCLV events workflow
+└── events.js          # Copy‑pasteable client‑side embed for website event feeds (iframe‑safe)
 ```
 
 
