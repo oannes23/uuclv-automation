@@ -64,7 +64,7 @@ The unified form collects:
 - **If you have your own graphic already, please upload it here**
 - Email Address (for contact + approvals)
 
-This is the *single* input source for all building and website events.
+This is the input source for **one‑shot** building + website events. Repeating events use a second, nearly identical form documented below.
 
 ---
 
@@ -114,6 +114,60 @@ All automation reads and writes from this sheet only.
 
 ---
 
+#### `Form Responses 2` (Authoritative Data Source for Repeating Events)
+
+Repeating events are submitted via a **second Google Form** whose responses land in a second tab: `Form Responses 2`.
+
+This form is intentionally almost identical to the main form, except it replaces the single **Event Date** question with two dropdowns:
+
+- **What week of the month does your event occur on?**: `Every`, `First`, `Second`, `Third`, `Fourth`
+- **What day of the week does your event occur on?**: `Sunday` … `Saturday`
+
+Columns are as follows (1‑based column letters in parentheses):
+
+1. **Approval** (`A`)  
+2. **Approver** (`B`)  
+3. **Timestamp** (`C`)  
+4. **Email Address** (`D`)  
+5. **Event Name** (`E`)  
+6. **Event Description (please include contact info for interested folks to ask questions)** (`F`)  
+7. **What week of the month does your event occur on?** (`G`)  
+8. **What day of the week does your event occur on?** (`H`)  
+9. **Event Start Time** (`I`)  
+10. **Event End Time** (`J`)  
+11. **Who is the target audience for this event?** (`K`)  
+12. **If this event is not Private, where should we advertise it?** (`L`)  
+13. **What part(s) of the building do you want to use?** (`M`)  
+14. **If you are requesting building space, how much setup and teardown time do you need before/after your event?** (`N`)  
+15. **If you are requesting building space, do you need a key holder to open and close the building or AV support?** (`O`)  
+16. **Do you need someone to create a graphic for this event?** (`P`)  
+17. **If you have your own graphic already, please upload it here** (`Q`)  
+18. **Building Calendar Recurring Event ID** (`R`)  
+19. **Website Calendar Recurring Event ID** (`S`)  
+
+Key behaviors:
+
+- Column **A – Approval**
+  - Defaults to `Pending` on form submit (set by Apps Script).
+  - Approvers change this to `Approved` or `Rejected`.
+- Column **B – Approver**
+  - Filled automatically with the approver’s Google Workspace email when they change `Approval` → `Approved`.
+- Columns **R – Building Calendar Recurring Event ID**, **S – Website Calendar Recurring Event ID**
+  - Store the **recurring series IDs** created on the Building and Member/Public calendars.
+  - Prevent duplicate series creation if the row is re‑edited.
+
+---
+
+#### `Recurring Instances` (Generated Sheet)
+
+To keep `All Upcoming` fast and simple, repeating events are **expanded into per‑instance rows** in a script‑owned sheet named `Recurring Instances`.
+
+- The Apps Script rebuilds this sheet from all `Form Responses 2` rows where `Approval = Approved`
+- The expansion is generated for a **single configured year** (see `Config!E2`)
+- The column order matches the `All Upcoming` output exactly so view formulas can do a simple union
+
+---
+
 #### `Config` Sheet — Approval + Calendar IDs
 
 The `Config` sheet provides:
@@ -124,6 +178,7 @@ The `Config` sheet provides:
 | B      | `Member Calendar ID`  | Calendar ID used for **Members and Friends** events |
 | C      | `Public Calendar ID`  | Calendar ID used for **General Public** events     |
 | D      | `Building Calendar ID`| Calendar ID used for **building reservations**     |
+| E      | `Recurring Year`      | Year used to generate repeating event instances (and RRULE UNTIL), e.g. `2026` |
 
 Typical layout:
 
@@ -136,7 +191,10 @@ Typical layout:
 - `D1`: `Building Calendar ID`
 - `D2`: actual Building Reservation calendar ID
 
-The Apps Script reads `Config!B2:D2` to know where to create calendar events.
+- `E1`: `Recurring Year`
+- `E2`: year to generate (e.g., `2026`)
+
+The Apps Script reads `Config!B2:D2` to know where to create calendar events, and reads `Config!E2` to know which year to generate repeating event instances for.
 
 ---
 
@@ -147,8 +205,9 @@ The Apps Script reads `Config!B2:D2` to know where to create calendar events.
 - Shows **only events where `Approval = Approved`**
 - Shows **only events whose end datetime is in the future**
 - Combines the date + time into start/end datetimes
+- Merges **one‑shot events** (`Form Responses 1`) with **repeating event instances** (`Recurring Instances`)
 - Is sorted by upcoming start time
-- Is constrained to a reasonable maximum number of rows (e.g., 200)
+- Is constrained to the soonest upcoming **10** events
 
 #### `All Upcoming` Formula
 
@@ -162,29 +221,35 @@ On the `All Upcoming` sheet, put the following into cell `A1`:
    "Form Timestamp","Building Event ID","Website Event ID"};
   ARRAY_CONSTRAIN(
     SORT(
-      FILTER(
-        {
-          'Form Responses 1'!B2:B,
-          'Form Responses 1'!E2:E,
-          'Form Responses 1'!F2:F,
-          'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
-          'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
-          'Form Responses 1'!K2:K,
-          'Form Responses 1'!J2:J,
-          'Form Responses 1'!L2:L,
-          'Form Responses 1'!M2:M,
-          'Form Responses 1'!O2:O,
-          'Form Responses 1'!P2:P,
-          'Form Responses 1'!C2:C,
-          'Form Responses 1'!Q2:Q,
-          'Form Responses 1'!R2:R
-        },
-        'Form Responses 1'!A2:A="Approved",
-        ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW()
-      ),
+      {
+        FILTER(
+          {
+            'Form Responses 1'!B2:B,
+            'Form Responses 1'!E2:E,
+            'Form Responses 1'!F2:F,
+            'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
+            'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
+            'Form Responses 1'!K2:K,
+            'Form Responses 1'!J2:J,
+            'Form Responses 1'!L2:L,
+            'Form Responses 1'!M2:M,
+            'Form Responses 1'!O2:O,
+            'Form Responses 1'!P2:P,
+            'Form Responses 1'!C2:C,
+            'Form Responses 1'!Q2:Q,
+            'Form Responses 1'!R2:R
+          },
+          'Form Responses 1'!A2:A="Approved",
+          ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW()
+        );
+        FILTER(
+          'Recurring Instances'!A2:N,
+          'Recurring Instances'!E2:E >= NOW()
+        )
+      },
       4, TRUE
     ),
-    200, 14
+    10, 14
   )
 })
 ```
@@ -203,30 +268,37 @@ To create a tab that shows only **approved Member events** (target audience = `M
    "Form Timestamp","Building Event ID","Website Event ID"};
   ARRAY_CONSTRAIN(
     SORT(
-      FILTER(
-        {
-          'Form Responses 1'!B2:B,
-          'Form Responses 1'!E2:E,
-          'Form Responses 1'!F2:F,
-          'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
-          'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
-          'Form Responses 1'!K2:K,
-          'Form Responses 1'!J2:J,
-          'Form Responses 1'!L2:L,
-          'Form Responses 1'!M2:M,
-          'Form Responses 1'!O2:O,
-          'Form Responses 1'!P2:P,
-          'Form Responses 1'!C2:C,
-          'Form Responses 1'!Q2:Q,
-          'Form Responses 1'!R2:R
-        },
-        'Form Responses 1'!A2:A="Approved",
-        ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW(),
-        'Form Responses 1'!K2:K="Members and Friends"
-      ),
+      {
+        FILTER(
+          {
+            'Form Responses 1'!B2:B,
+            'Form Responses 1'!E2:E,
+            'Form Responses 1'!F2:F,
+            'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
+            'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
+            'Form Responses 1'!K2:K,
+            'Form Responses 1'!J2:J,
+            'Form Responses 1'!L2:L,
+            'Form Responses 1'!M2:M,
+            'Form Responses 1'!O2:O,
+            'Form Responses 1'!P2:P,
+            'Form Responses 1'!C2:C,
+            'Form Responses 1'!Q2:Q,
+            'Form Responses 1'!R2:R
+          },
+          'Form Responses 1'!A2:A="Approved",
+          ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW(),
+          'Form Responses 1'!K2:K="Members and Friends"
+        );
+        FILTER(
+          'Recurring Instances'!A2:N,
+          'Recurring Instances'!E2:E >= NOW(),
+          'Recurring Instances'!F2:F="Members and Friends"
+        )
+      },
       4, TRUE
     ),
-    200, 14
+    10, 14
   )
 })
 ```
@@ -245,30 +317,37 @@ To create a tab that shows only **approved events that requested promotion in th
    "Form Timestamp","Building Event ID","Website Event ID"};
   ARRAY_CONSTRAIN(
     SORT(
-      FILTER(
-        {
-          'Form Responses 1'!B2:B,
-          'Form Responses 1'!E2:E,
-          'Form Responses 1'!F2:F,
-          'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
-          'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
-          'Form Responses 1'!K2:K,
-          'Form Responses 1'!J2:J,
-          'Form Responses 1'!L2:L,
-          'Form Responses 1'!M2:M,
-          'Form Responses 1'!O2:O,
-          'Form Responses 1'!P2:P,
-          'Form Responses 1'!C2:C,
-          'Form Responses 1'!Q2:Q,
-          'Form Responses 1'!R2:R
-        },
-        'Form Responses 1'!A2:A="Approved",
-        ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW(),
-        REGEXMATCH('Form Responses 1'!L2:L,"Friday Flash")
-      ),
+      {
+        FILTER(
+          {
+            'Form Responses 1'!B2:B,
+            'Form Responses 1'!E2:E,
+            'Form Responses 1'!F2:F,
+            'Form Responses 1'!G2:G + 'Form Responses 1'!H2:H,
+            'Form Responses 1'!G2:G + 'Form Responses 1'!I2:I,
+            'Form Responses 1'!K2:K,
+            'Form Responses 1'!J2:J,
+            'Form Responses 1'!L2:L,
+            'Form Responses 1'!M2:M,
+            'Form Responses 1'!O2:O,
+            'Form Responses 1'!P2:P,
+            'Form Responses 1'!C2:C,
+            'Form Responses 1'!Q2:Q,
+            'Form Responses 1'!R2:R
+          },
+          'Form Responses 1'!A2:A="Approved",
+          ('Form Responses 1'!G2:G + 'Form Responses 1'!I2:I) >= NOW(),
+          REGEXMATCH('Form Responses 1'!L2:L,"Friday Flash")
+        );
+        FILTER(
+          'Recurring Instances'!A2:N,
+          'Recurring Instances'!E2:E >= NOW(),
+          REGEXMATCH('Recurring Instances'!H2:H,"Friday Flash")
+        )
+      },
       4, TRUE
     ),
-    200, 14
+    10, 14
   )
 })
 ```
@@ -286,19 +365,23 @@ All automation lives in a single Apps Script project attached to this spreadshee
 The project has:
 
 - `combineDateAndTime(date, time)` – helper for combining separate date and time cells
+- `combineDateWithTime_(date, time)` – helper for combining a date-only value with a time-only value
 - `normalize_(value)` – helper for case‑insensitive comparisons
+- `getRecurringYear_()` – reads the configured year for repeating event generation (`Config!E2`)
 - `onFormSubmit(e)` – initializes metadata columns for new submissions
 - `onApprovalEdit(e)` – reacts to Approval → Approved, populates Approver, and creates calendar events
+- `rebuildRecurringInstances()` – regenerates the `Recurring Instances` tab from approved repeating events
 
 ### Trigger 1 — `onFormSubmit`
 
-**Event:** Installable trigger, “On form submit” on the `Form Responses 1` sheet.
+**Event:** Installable trigger, “On form submit” on the spreadsheet (runs for submissions to `Form Responses 1` and `Form Responses 2`).
 
 Behavior:
 
 - Sets `Approval` (`A`) to `Pending` for the new row if blank
 - Clears `Approver` (`B`) if any stale value is present
-- Clears both `Building Calendar Event ID` (`Q`) and `Website Calendar Event ID` (`R`) so re‑submissions never reuse stale IDs
+- For `Form Responses 1`: clears both `Building Calendar Event ID` (`Q`) and `Website Calendar Event ID` (`R`) so re‑submissions never reuse stale IDs
+- For `Form Responses 2`: clears both `Building Calendar Recurring Event ID` (`R`) and `Website Calendar Recurring Event ID` (`S`) so re‑submissions never reuse stale IDs
 
 ### Trigger 2 — `onApprovalEdit`
 
@@ -346,6 +429,17 @@ Behavior when `Approval` changes to `Approved` on a data row:
 6. **Idempotency**
    - If either `Building Calendar Event ID` (`Q`) or `Website Calendar Event ID` (`R`) already has a value, the script **does not** create another event for that calendar, but still updates the `Approver` field.
 
+7. **Repeating events (`Form Responses 2`)**
+   - Reads **What week of the month does your event occur on?** (`G`) + **What day of the week does your event occur on?** (`H`) + start/end times and builds a **monthly RRULE** for the configured year (`Config!E2`).
+   - Creates **recurring series** events (not per‑instance events) using the **Advanced Calendar service** (Google Calendar API):
+     - Building reservation series on the Building calendar (only if building spaces are non‑blank; includes setup/teardown padding)
+     - Website series on Member/Public calendar based on target audience (`Private Event` creates no website series)
+   - Stores the **recurring series IDs** in `Form Responses 2`:
+     - `R`: Building Calendar Recurring Event ID
+     - `S`: Website Calendar Recurring Event ID
+   - Rebuilds the `Recurring Instances` sheet so `All Upcoming` can merge one‑shot + repeating seamlessly.
+   - Idempotency for repeating events: if `R` / `S` already contain IDs, the script will not create another series; to regenerate a series after edits, clear the ID cell(s) and re‑approve.
+
 ---
 
 ## Timezone Configuration (Pacific Time)
@@ -372,10 +466,13 @@ The repository includes:
 
 - `Code.gs` – the full Apps Script implementation, containing:
   - `combineDateAndTime(date, time)`
+  - `combineDateWithTime_(date, time)`
   - `normalize_(value)`
   - Helpers for reading calendar IDs from `Config`
+  - Helpers for repeating-event RRULE generation and instance expansion
   - `onFormSubmit(e)`
   - `onApprovalEdit(e)`
+  - `rebuildRecurringInstances()`
   - Column mapping documentation inline
 
 ---
@@ -387,6 +484,7 @@ The Apps Script project will request:
 - Spreadsheet read/write access
 - Calendar creation access (for **all three** calendars)
 - Access to the user’s email (to log Approver identity)
+- For repeating events: access to the **Google Calendar API** via the **Advanced Calendar service** (used to create RRULE-based recurring series)
 
 The first time triggers run, Google will prompt for authorization.
 
