@@ -45,6 +45,7 @@
  *  17 / 16 : Q - If you have your own graphic already, please upload it here
  *  18 / 17 : R - Building Calendar Recurring Event ID (series ID)
  *  19 / 18 : S - Website Calendar Recurring Event ID (series ID)
+ *  20 / 19 : T - Skip Months (comma-separated month numbers, e.g. "3, 7" to skip March and July)
  *
  * SHEET: "Config" – approval statuses + calendar IDs
  *
@@ -241,6 +242,24 @@ function repeatPatternToBysetpos_(repeatPatternRaw) {
 }
 
 /**
+ * Helper: parse comma-separated month numbers into a Set of 0-indexed month values.
+ * Input: "3, 7, 12" (1-indexed month numbers)
+ * Output: Set {2, 6, 11} (0-indexed for JS Date months)
+ */
+function parseSkipMonths_(skipMonthsRaw) {
+  if (!skipMonthsRaw) return new Set();
+  const parts = String(skipMonthsRaw).split(',');
+  const result = new Set();
+  for (let i = 0; i < parts.length; i++) {
+    const num = parseInt(parts[i].trim(), 10);
+    if (!isNaN(num) && num >= 1 && num <= 12) {
+      result.add(num - 1); // Convert to 0-indexed
+    }
+  }
+  return result;
+}
+
+/**
  * Helper: compute all occurrence dates in a month for either:
  * - Every: all matching weekdays in that month
  * - Nth (1-4): the Nth weekday in that month (always exists for 1-4)
@@ -423,12 +442,16 @@ function onFormSubmit(e) {
  *  - 'Form Responses 2' (repeating events): creates RRULE-based recurring series and stores series IDs (R/S),
  *    then rebuilds the 'Recurring Instances' expansion sheet.
  *
+ * When Skip Months (column T) is changed on 'Form Responses 2':
+ *  - Rebuilds 'Recurring Instances' without touching calendars.
+ *
  * Install this as an "On edit" trigger on the spreadsheet.
  */
 function onApprovalEdit(e) {
   const FIRST_DATA_ROW = 2;
   const APPROVAL_COL = 1;   // Column A: Approval
   const APPROVER_COL = 2;   // Column B: Approver
+  const SKIP_MONTHS_COL = 20; // Column T: Skip Months
 
   if (!e || !e.range) {
     return;
@@ -442,7 +465,17 @@ function onApprovalEdit(e) {
   if (row < FIRST_DATA_ROW) {
     return;
   }
-  if (range.getColumn() !== APPROVAL_COL) {
+
+  const col = range.getColumn();
+
+  // Handle Skip Months (column T) edits on Form Responses 2:
+  // Just rebuild instances, no calendar changes.
+  if (sheetName === 'Form Responses 2' && col === SKIP_MONTHS_COL) {
+    rebuildRecurringInstances_();
+    return;
+  }
+
+  if (col !== APPROVAL_COL) {
     return;
   }
 
@@ -908,8 +941,10 @@ function rebuildRecurringInstances_() {
     const graphic = r[16];             // Q
     const buildingSeriesId = r[17];    // R
     const websiteSeriesId = r[18];     // S
+    const skipMonthsRaw = r[19];       // T - Skip Months
 
     const jsWeekdayIndex = dayOfWeekToJsIndex_(dayOfWeekRaw);
+    const skipMonths = parseSkipMonths_(skipMonthsRaw);
     const bysetpos = repeatPatternToBysetpos_(repeatPatternRaw);
     if (jsWeekdayIndex === null) {
       continue;
@@ -919,6 +954,7 @@ function rebuildRecurringInstances_() {
     }
 
     for (let m = 0; m < 12; m++) {
+      if (skipMonths.has(m)) continue; // Skip cancelled months
       const dates = computeMonthlyOccurrenceDates_(year, m, jsWeekdayIndex, bysetpos);
       for (let di = 0; di < dates.length; di++) {
         const d = dates[di];
