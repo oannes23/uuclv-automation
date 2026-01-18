@@ -93,37 +93,6 @@ function normalize_(value) {
 }
 
 /**
- * Helper: sanitize text for Google Calendar API compatibility.
- * Some Unicode characters can cause Calendar API to fail silently.
- * Keeps normal letters, numbers, punctuation, accented characters, and common symbols.
- */
-function sanitizeForCalendar_(text) {
-  if (!text) return '';
-  return String(text)
-    .normalize('NFKC')      // Normalize Unicode (e.g., fancy quotes → regular quotes, ™ → TM)
-    .replace(/[\u2000-\u200F\u2028-\u202F\u205F-\u206F]/g, ' ')  // Unusual whitespace/formatting → space
-    .replace(/[\u2010-\u2015]/g, '-')   // Various dashes → hyphen
-    .replace(/[\u2018\u2019\u201B]/g, "'")  // Fancy single quotes → apostrophe
-    .replace(/[\u201C\u201D\u201F]/g, '"')  // Fancy double quotes → quote
-    .replace(/[\u2026]/g, '...')        // Ellipsis → three dots
-    .replace(/[\u2032]/g, "'")          // Prime → apostrophe
-    .replace(/[\u2033]/g, '"')          // Double prime → quote
-    .replace(/[\u00B7\u2022\u2023\u2043]/g, '-')  // Bullets → hyphen
-    .replace(/[\u2190-\u21FF]/g, '->')  // Arrows → arrow text
-    .replace(/[\u2200-\u22FF]/g, '')    // Mathematical operators (∴, ∞, etc.) → remove
-    .replace(/[\u2300-\u23FF]/g, '')    // Misc technical symbols → remove
-    .replace(/[\u2500-\u257F]/g, '-')   // Box drawing → hyphen
-    .replace(/[\u2580-\u259F]/g, '')    // Block elements → remove
-    .replace(/[\u25A0-\u25FF]/g, '*')   // Geometric shapes → asterisk
-    .replace(/[\u2600-\u26FF]/g, '')    // Misc symbols (but not emoji) → remove
-    .replace(/[\u2700-\u27BF]/g, '')    // Dingbats → remove
-    .replace(/[\uFE00-\uFE0F]/g, '')    // Variation selectors → remove
-    .replace(/[\uFFF0-\uFFFF]/g, '')    // Specials → remove
-    .replace(/\s+/g, ' ')               // Collapse multiple spaces
-    .trim();
-}
-
-/**
  * Helper: validate event date is within acceptable year range.
  * Returns error message if invalid, null if valid.
  */
@@ -648,11 +617,11 @@ function onApprovalEdit(e) {
 
         try {
           const buildingEvent = buildingCalendar.createEvent(
-            sanitizeForCalendar_(eventName),
+            eventName,
             buildingStart,
             buildingEnd,
             {
-              description: sanitizeForCalendar_(buildingDescription),
+              description: buildingDescription,
               location: buildingParts || '',
             }
           );
@@ -687,11 +656,11 @@ function onApprovalEdit(e) {
 
         try {
           const websiteEvent = websiteCalendar.createEvent(
-            sanitizeForCalendar_(eventName),
+            eventName,
             baseStartDateTime,
             baseEndDateTime,
             {
-              description: sanitizeForCalendar_(websiteDescription),
+              description: websiteDescription,
               location: buildingParts || '',
             }
           );
