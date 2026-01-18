@@ -124,6 +124,24 @@ function sanitizeForCalendar_(text) {
 }
 
 /**
+ * Helper: validate event date is within acceptable year range.
+ * Returns error message if invalid, null if valid.
+ */
+function validateEventYear_(eventDate) {
+  if (!(eventDate instanceof Date) || isNaN(eventDate.getTime())) {
+    return 'Invalid date';
+  }
+  const eventYear = eventDate.getFullYear();
+  const recurringYear = getRecurringYear_();
+  const minYear = recurringYear - 1;
+  const maxYear = recurringYear + 1;
+  if (eventYear < minYear || eventYear > maxYear) {
+    return 'Event year ' + eventYear + ' is outside valid range (' + minYear + '-' + maxYear + '). Check for typos.';
+  }
+  return null;
+}
+
+/**
  * Helper: read the configured recurring year from Config!E2. Defaults to current year.
  */
 function getRecurringYear_() {
@@ -575,6 +593,12 @@ function onApprovalEdit(e) {
     const baseStartDateTime = combineDateAndTime(dateVal, startTimeVal);
     const baseEndDateTime = combineDateAndTime(dateVal, endTimeVal);
     if (!eventName || !baseStartDateTime || !baseEndDateTime) {
+      return;
+    }
+
+    const yearError = validateEventYear_(baseStartDateTime);
+    if (yearError) {
+      appendNote_(sheet.getRange(row, APPROVAL_COL), yearError);
       return;
     }
 
